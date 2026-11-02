@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090b12"><title>TAKE MUSIC</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{color-scheme:dark;--bg:#090b12;--panel:#141a29;--line:#30384d;--muted:#a5aec1;--accent:#a78bfa}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0,#282044 0,transparent 36%),var(--bg);color:#f8f7fc;font:16px system-ui,-apple-system,sans-serif}
+header{position:sticky;top:0;background:#090b12ed;backdrop-filter:blur(12px);border-bottom:1px solid var(--line);z-index:2}
+nav,.wrap{max-width:1000px;margin:auto;padding:16px}nav{display:flex;align-items:center;justify-content:space-between;gap:12px}.logo{font-size:23px;font-weight:900;letter-spacing:2px}.logo span,h1 span{color:var(--accent)}
+main{padding-bottom:30px}.hero{padding:40px 0 20px}.eyebrow{font-size:12px;letter-spacing:2px;color:var(--accent);font-weight:800}h1{font-size:clamp(38px,8vw,68px);line-height:1.05;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.panel{background:#141a29ed;border:1px solid var(--line);border-radius:18px;padding:20px;margin:14px 0}
+input{display:block;width:100%;padding:12px;margin:7px 0 13px;border:1px solid var(--line);border-radius:10px;background:#090d18;color:white}label{font-size:13px;color:var(--muted)}
+button{padding:11px 15px;border:0;border-radius:11px;background:var(--accent);color:#160f2b;font-weight:750;cursor:pointer}button.alt{background:#252d40;color:white;border:1px solid var(--line)}button:disabled{opacity:.5}
+.row{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:space-between}.muted,small{color:var(--muted)}#status{min-height:24px;color:#c4b5fd}.track{padding:14px 0;border-bottom:1px solid var(--line)}.track:last-child{border:0}audio{width:100%;margin-top:9px}footer{text-align:center;color:var(--muted);padding:24px;font-size:13px}
+</style></head>
+<body>
+<header><nav><div class="logo">TAKE<span>.</span> MUSIC</div><div class="row"><button class="alt" id="langBtn">EN</button><button class="alt" id="logoutBtn" hidden>ออกจากระบบ</button></div></nav></header>
+<main class="wrap">
+<section class="hero"><div class="eyebrow">INDEPENDENT MUSIC PLATFORM</div><h1>เสียงของคุณ<br><span>ไปได้ไกลกว่าเดิม</span></h1><p class="muted" id="tagline">พื้นที่เผยแพร่และจัดเก็บผลงานเพลงของคุณ</p></section>
+<p id="status" role="status">กำลังเชื่อมต่อระบบ…</p>
+<div class="grid">
+<section class="panel"><h2 id="authHead">เข้าสู่ระบบ / สมัครสมาชิก</h2><label>อีเมล</label><input id="email" type="email" autocomplete="email" placeholder="name@email.com"><label>รหัสผ่าน</label><input id="password" type="password" autocomplete="current-password" placeholder="อย่างน้อย 6 ตัวอักษร"><div class="row"><button id="loginBtn">เข้าสู่ระบบ</button><button class="alt" id="signupBtn">สมัครสมาชิก</button></div><p class="muted">หากระบบเปิดยืนยันอีเมล โปรดตรวจกล่องจดหมาย</p></section>
+<section class="panel"><h2 id="uploadHead">อัปโหลดเพลง</h2><p class="muted" id="uploadHint">เข้าสู่ระบบก่อนเพื่อเพิ่มผลงาน</p><label>ชื่อเพลง</label><input id="songTitle" placeholder="ชื่อเพลง"><label>ชื่อศิลปิน</label><input id="artistName" placeholder="ชื่อศิลปิน"><label>ไฟล์เสียง</label><input id="audioFile" type="file" accept="audio/*"><button id="uploadBtn" disabled>อัปโหลดและเผยแพร่</button><p class="muted">อัปโหลดเฉพาะเพลงที่คุณมีสิทธิ์เผยแพร่</p></section>
+</div>
+<section class="panel"><div class="row"><h2 id="libraryHead">คลังเพลง</h2><button class="alt" id="refreshBtn">รีเฟรช</button></div><div id="tracks">กำลังโหลดเพลง…</div></section>
+</main><footer>TAKE MUSIC · Independent artists, one place.</footer>
+<script>
+const SUPABASE_URL='https://qbcsruacbhuofwfpfxup.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_YbE_q8BA_smEhWuynzqq-w_xW6vF4BO';
+const STORAGE_BUCKET='TAKE-MUSIC';
+const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const $=id=>document.getElementById(id);let currentUser=null,english=false;
+const say=t=>$('status').textContent=t, tr=(th,en)=>english?en:th;
+async function refreshSession(){
+ const {data,error}=await db.auth.getSession();
+ if(error){say(error.message);return}
+ currentUser=data.session?.user||null;
+ $('logoutBtn').hidden=!currentUser;$('uploadBtn').disabled=!currentUser;
+ $('uploadHint').textContent=currentUser?currentUser.email:tr('เข้าสู่ระบบก่อนเพื่อเพิ่มผลงาน','Sign in before uploading');
+}
+async function auth(kind){
+ const email=$('email').value.trim(),password=$('password').value;
+ if(!email||!password)return say(tr('กรอกอีเมลและรหัสผ่านก่อน','Enter email and password first'));
+ if(password.length<6)return say(tr('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร','Password must be at least 6 characters'));
+ say(tr('กำลังดำเนินการ…','Please wait…'));
+ const result=kind==='login'?await db.auth.signInWithPassword({email,password}):await db.auth.signUp({email,password});
+ if(result.error)return say(result.error.message);
+ currentUser=result.data.user||null;
+ say(kind==='login'?tr('เข้าสู่ระบบสำเร็จ','Signed in successfully'):tr('สมัครสมาชิกแล้ว โปรดตรวจอีเมลหากต้องยืนยัน','Account created; check email if confirmation is enabled'));
+ await refreshSession();
+}
+$('loginBtn').onclick=()=>auth('login');$('signupBtn').onclick=()=>auth('signup');
+$('logoutBtn').onclick=async()=>{const {error}=await db.auth.signOut();if(error)return say(error.message);currentUser=null;await refreshSession();say(tr('ออกจากระบบแล้ว','Signed out'))};
+async function loadTracks(){
+ const box=$('tracks');box.textContent=tr('กำลังโหลด…','Loading…');
+ const {data,error}=await db.from('tracks').select('id,title,artist_name,audio_path,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(100);
+ if(error){box.textContent=error.message;return}
+ box.innerHTML='';
+ if(!data?.length){box.textContent=tr('ยังไม่มีเพลงที่เผยแพร่','No published tracks yet');return}
+ for(const track of data){
+  const item=document.createElement('article');item.className='track';
+  const title=document.createElement('strong');title.textContent=track.title||'Untitled';
+  const artist=document.createElement('small');artist.textContent=' · '+(track.artist_name||'Unknown artist');
+  const player=document.createElement('audio');player.controls=true;player.preload='none';
+  player.src=db.storage.from(STORAGE_BUCKET).getPublicUrl(track.audio_path).data.publicUrl;
+  item.append(title,artist,player);box.append(item);
+ }
+}
+$('uploadBtn').onclick=async()=>{
+ if(!currentUser)return say(tr('กรุณาเข้าสู่ระบบก่อน','Please sign in first'));
+ const file=$('audioFile').files[0],title=$('songTitle').value.trim(),artist=$('artistName').value.trim();
+ if(!file||!title||!artist)return say(tr('กรอกชื่อเพลง ชื่อศิลปิน และเลือกไฟล์ให้ครบ','Enter title, artist and choose an audio file'));
+ if(!file.type.startsWith('audio/'))return say(tr('ไฟล์ที่เลือกไม่ใช่ไฟล์เสียง','Please choose an audio file'));
+ $('uploadBtn').disabled=true;say(tr('กำลังอัปโหลดไฟล์เสียง…','Uploading audio…'));
+ const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_'),path=currentUser.id+'/'+Date.now()+'_'+safeName;
+ const uploaded=await db.storage.from(STORAGE_BUCKET).upload(path,file,{contentType:file.type,upsert:false});
+ if(uploaded.error){say(uploaded.error.message);$('uploadBtn').disabled=false;return}
+ say(tr('บันทึกข้อมูลเพลง…','Saving track details…'));
+ const saved=await db.from('tracks').insert({user_id:currentUser.id,title,artist_name:artist,audio_path:path,status:'approved'});
+ if(saved.error){say(tr('ไฟล์ถูกอัปโหลดแล้ว แต่บันทึกข้อมูลเพลงไม่สำเร็จ: ','Audio uploaded, but track record failed: ')+saved.error.message);$('uploadBtn').disabled=false;return}
+ $('songTitle').value='';$('artistName').value='';$('audioFile').value='';
+ say(tr('เผยแพร่เพลงเรียบร้อย','Track published successfully'));await loadTracks();$('uploadBtn').disabled=false;
+};
+$('refreshBtn').onclick=loadTracks;
+$('langBtn').onclick=()=>{
+ english=!english;$('langBtn').textContent=english?'TH':'EN';
+ $('tagline').textContent=tr('พื้นที่เผยแพร่และจัดเก็บผลงานเพลงของคุณ','A home to publish and store your music');
+ $('authHead').textContent=tr('เข้าสู่ระบบ / สมัครสมาชิก','Sign in / Create account');
+ $('loginBtn').textContent=tr('เข้าสู่ระบบ','Sign in');$('signupBtn').textContent=tr('สมัครสมาชิก','Create account');
+ $('logoutBtn').textContent=tr('ออกจากระบบ','Sign out');$('uploadHead').textContent=tr('อัปโหลดเพลง','Upload music');
+ $('uploadBtn').textContent=tr('อัปโหลดและเผยแพร่','Upload & publish');$('libraryHead').textContent=tr('คลังเพลง','Music library');
+ $('refreshBtn').textContent=tr('รีเฟรช','Refresh');
+};
+db.auth.onAuthStateChange(()=>{refreshSession()});
+(async()=>{await refreshSession();await loadTracks()})();
+</script></body></html>
